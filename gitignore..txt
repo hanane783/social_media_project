@@ -1,0 +1,22 @@
+# Python
+pycache/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Django
+*.log
+*.pot
+*.pyc
+*.mo
+*.db
+
+# Virtual environment
+venv/
+Lib/
+Scripts/
+pyvenv.cfg
+
+# Media & uploads
+media/
