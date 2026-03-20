@@ -4,5 +4,5 @@ from .views import  ChatHistoryView
 urlpatterns = [
 
 
-path('chat/<int:user_id>/', ChatHistoryView.as_view()),
+path('chat/<int:user_id>/', ChatHistoryView.as_view(),name='history'),
 ]
