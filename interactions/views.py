@@ -29,33 +29,26 @@ from rest_framework.permissions import IsAuthenticated
     },
     responses={201: {"type": "object", "properties": {"message": {"type": "string"}, "post_id": {"type": "integer"}}}}
 )
+
 class PostView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        user = request.user
-        content = request.data.get('content')
-        image = request.data.get('image')
-        video = request.data.get('video')
+        content = request.data.get("content")
+        files = request.FILES.getlist("files")
 
-        post = Post.objects.create(author=user, content=content, image=image, video=video)
-        return Response({"message": "Post created", "post_id": post.id}, status=201)
+        post = Post.objects.create(
+            author=request.user,
+            content=content
+        )
 
-    def get(self, request):
-        posts = Post.objects.all().order_by('-created_at')
-        data = []
-        for p in posts:
-            data.append({
-                "id": p.id,
-                "author": p.author.username,
-                "content": p.content,
-                "image": p.image.url if p.image else None,
-                "video": p.video.url if p.video else None,
-                "likes_count": p.likes_count,
-                "comments_count": p.comments_count,
-                "created_at": p.created_at
-            })
-        return Response(data, status=200)
+        for file in files:
+            PostMedia.objects.create(
+                post=post,
+                file=file
+            )
+
+        return Response({"message": "Post created"})
 
 @extend_schema(
     description="Get paginated list of posts",
@@ -107,15 +100,11 @@ class PostListView(ListAPIView):
                 # 🔥 Counts
                 "likes": post.likes_count,
                 "comments": post.comments_count,
-
                 # 🎥 Media
-                "image": post.image.url if post.image else None,
-                "video": post.video.url if post.video else None,
-
+                "media": [m.file.url for m in post.media.all()],
                 # 🧠 Smart fields
                 "is_liked": post.likes.filter(user=request.user).exists(),
                 "is_following": request.user.following.filter(id=post.author.id).exists(),
-
                 "created_at": post.created_at
             })
 
@@ -483,3 +472,21 @@ class FeedView(ListAPIView):
             })
 
         return self.get_paginated_response(data)
+
+
+class SharePostView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, post_id):
+        receiver_id = request.data.get("receiver_id")
+
+        post = Post.objects.get(id=post_id)
+        receiver = User.objects.get(id=receiver_id)
+
+        Share.objects.create(
+            post=post,
+            sender=request.user,
+            receiver=receiver
+        )
+
+        return Response({"message": "Post shared"})

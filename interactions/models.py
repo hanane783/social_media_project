@@ -7,8 +7,6 @@ from accounts.models import User  # الموديل الأساسي للمستخد
 class Post(models.Model):
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
     content = models.TextField(blank=True, default="")  # قيمة افتراضية لتجنب مشاكل الميجريشن
-    image = models.ImageField(upload_to='images/', blank=True, null=True)
-    video = models.FileField(upload_to='videos/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     @property
@@ -21,6 +19,12 @@ class Post(models.Model):
 
     def str(self):
         return f"Post by {self.author.username} ({self.created_at})"
+
+        # ___________postmedia_________________
+class PostMedia(models.Model):
+    post = models.ForeignKey(Post, related_name='media', on_delete=models.CASCADE)
+    file = models.FileField(upload_to='post_media/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
 
 
 # ----------------- Comment -----------------
@@ -72,3 +76,12 @@ class Follow(models.Model):
 
     def str(self):
         return f"{self.follower.username} follows {self.following.username}"
+
+
+
+        # ___________________________
+class Share(models.Model):
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE)
+    receiver = models.ForeignKey(User, related_name='received_shares', on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)

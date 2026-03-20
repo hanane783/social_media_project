@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
+from rest_framework.permissions import IsAuthenticated
 from .models import User
 import random
 from django.core.mail import EmailMultiAlternatives
@@ -114,6 +115,16 @@ class ResendOTPView(APIView):
         if user.is_verified:
             return Response({"error": "Account already verified"}, status=400)
 
+
+            
+        # 🚨 تحقق من الوقت
+        if user.last_otp_sent:
+            diff = timezone.now() - user.last_otp_sent
+            if diff < timedelta(seconds=30):
+                return Response({
+                    "error": "Wait 30 seconds before requesting new OTP"
+                }, status=429)
+
         otp = random.randint(100000, 999999)
         user.otp_code = otp
         user.save()
@@ -187,3 +198,26 @@ class ProfileView(APIView):
             "profile_picture": user.profile_picture.url if user.profile_picture else None,
             "bio": user.bio if hasattr(user, 'bio') else None,
         })
+
+
+
+@extend_schema(
+    parameters=[{"name": "username", "required": True, "type": "string"}],
+    responses={200: {"type": "array"}}
+)
+class SearchUserView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        username = request.GET.get('username', '')
+        users = User.objects.filter(username__icontains=username)
+
+        data = []
+        for u in users:
+            data.append({
+                "id": u.id,
+                "username": u.username,
+                "is_following": request.user.following.filter(id=u.id).exists()
+            })
+
+        return Response(data)

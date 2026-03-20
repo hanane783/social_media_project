@@ -47,8 +47,14 @@ INSTALLED_APPS = [
    
     'accounts',
     'interactions',
+    'channels',
+    'chat',
 ]
 AUTH_USER_MODEL = 'accounts.User'
+
+
+
+
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -111,8 +117,14 @@ TEMPLATES = [
         },
     },
 ]
-
+ASGI_APPLICATION = 'web_project.asgi.application'
 WSGI_APPLICATION = 'web_project.wsgi.application'
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
+    },
+}
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',

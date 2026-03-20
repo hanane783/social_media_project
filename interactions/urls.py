@@ -14,6 +14,7 @@ from .views import (
     CommentListView,
     PostListView,
     FeedView,
+    SharePostView,
  
 )
 
@@ -23,6 +24,7 @@ urlpatterns = [
     path('post/<int:post_id>/update/', UpdatePostView.as_view(), name='update-post'),
     path('post/<int:post_id>/delete/', DeletePostView.as_view(), name='delete-post'),
     path('posts/', PostListView.as_view()),
+    path('share/<int:post_id>/', SharePostView.as_view(), name='share-post'),
 
     # ----------------- Comment -----------------
     path('posts/<int:post_id>/comments/', CommentView.as_view(), name='comments'),  # GET/POST تعليقات بوست معين
