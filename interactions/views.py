@@ -1,6 +1,6 @@
 from django.shortcuts import render
 
-# Create your views here.
+# # # Create your views here.
 from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -15,7 +15,7 @@ from .pagination import StandardResultsSetPagination
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import permission_classes
 
-# ----------------- Post -----------------
+# # # ----------------- Post -----------------
 
 
 
@@ -137,7 +137,7 @@ class PostListView(APIView):
                 "video": {"type": "string"}
             }
         }
-    },
+  },
     responses={200: {"type": "object", "properties": {"message": {"type": "string"}}}}
 )
 class UpdatePostView(APIView):
@@ -599,23 +599,36 @@ class ToggleCommentLikeView(APIView):
 # ----------------- Follow -----------------
 
 @extend_schema(
-    responses={200: {"type": "object", "properties": {
-        "message": {"type": "string"},
-        "following": {"type": "boolean"}
-    }}}
-)
-@extend_schema(
     request=None,
     responses={
-        
         200: OpenApiResponse(
-            response=dict,
-            examples=[
-                {"message": "Followed"},
-                {"message": "Unfollowed"}
-            ]
+            response={
+                "type": "object",
+                "properties": {
+                    "message": {"type": "string"},
+                    "following": {"type": "boolean"}
+                }
+            },
+            description="Followed or Unfollowed successfully"
         ),
-        404: OpenApiResponse(description="User not found")
+        400: OpenApiResponse(
+            response={
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"}
+                }
+            },
+            description="Invalid action (e.g., follow yourself)"
+        ),
+        404: OpenApiResponse(
+            response={
+                "type": "object",
+                "properties": {
+                    "error": {"type": "string"}
+                }
+            },
+            description="User not found"
+        )
     },
     summary="Follow or unfollow a user",
     description="Authenticated user can follow or unfollow another user."
@@ -654,7 +667,7 @@ class ToggleFollowView(APIView):
     responses=OpenApiResponse(
         response=list,
         description="List of followers",
-        examples=[{"id": 2, "username": "ilyes"}]
+     
     ),
     summary="Get followers of a user",
 )
@@ -670,7 +683,7 @@ class FollowersView(APIView):
     responses=OpenApiResponse(
         response=list,
         description="List of users that this user is following",
-        examples=[{"id": 3, "username": "hana"}]
+     
     ),
     summary="Get users that a user is following",
 )
@@ -686,7 +699,7 @@ class FollowingView(APIView):
     responses=OpenApiResponse(
         response=list,
         description="Suggested users to follow",
-        examples=[{"id": 4, "username": "selma"}, {"id": 5, "username": "nour"}]
+  
     ),
     summary="Get suggestions for users to follow",
 )
@@ -851,3 +864,18 @@ class SavedPostsView(ListAPIView):
             })
 
         return Response(data)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
