@@ -10,6 +10,8 @@ import random
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.decorators import permission_classes
+from rest_framework.decorators import api_view
 
 # --------------------------
 # تسجيل حساب مع OTP
@@ -221,3 +223,30 @@ class SearchUserView(APIView):
             })
 
         return Response(data)
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_profile(request):
+    user = request.user
+
+    user.username = request.data.get('username', user.username)
+    user.bio = request.data.get('bio', user.bio)
+    user. profile_picture = request.data.get(' profile_picture ',user. profile_picture )
+
+    user.save()
+
+    return Response({"message": "Profile updated"})
+
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def change_password(request):
+    user = request.user
+
+    if not user.check_password(request.data['old_password']):
+        return Response({"error": "Wrong password"}, status=400)
+
+    user.set_password(request.data['new_password'])
+    user.save()
+
+    return Response({"message": "Password updated"})

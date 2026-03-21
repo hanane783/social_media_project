@@ -1,11 +1,11 @@
 from django.shortcuts import render
 
 # Create your views here.
-
+from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema,OpenApiResponse
 from django.shortcuts import get_object_or_404
 from .models import Post, Comment, Like, CommentLike, Follow
 from accounts.models import User
@@ -13,23 +13,38 @@ from rest_framework.generics import ListAPIView
 from .models import Post
 from .pagination import StandardResultsSetPagination
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import permission_classes
 
 # ----------------- Post -----------------
+
+
+
 @extend_schema(
-    description="Create or list posts",
+    description="Create a new post with optional images/videos",
     request={
-        "application/json": {
+        "multipart/form-data": {  # لأننا نرسل ملفات
             "type": "object",
             "properties": {
                 "content": {"type": "string"},
-                "image": {"type": "string", "format": "binary"},
-                "video": {"type": "string", "format": "binary"}
+                "images": {
+                    "type": "array",
+                    "items": {"type": "string", "format": "binary"},
+                    "description": "Optional images for the post"
+                },
+                "video": {"type": "string", "format": "binary", "description": "Optional single video"}
             }
         }
     },
-    responses={201: {"type": "object", "properties": {"message": {"type": "string"}, "post_id": {"type": "integer"}}}}
+    responses={
+        201: {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"},
+                "post_id": {"type": "integer"}
+            }
+        }
+    }
 )
-
 class PostView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -50,8 +65,13 @@ class PostView(APIView):
 
         return Response({"message": "Post created"})
 
+
+
+
+
+
 @extend_schema(
-    description="Get paginated list of posts",
+    description="Get paginated list of posts with media, likes, comments and follow info",
     responses={
         200: {
             "type": "object",
@@ -69,8 +89,9 @@ class PostView(APIView):
                             "author": {"type": "string"},
                             "likes": {"type": "integer"},
                             "comments": {"type": "integer"},
-                            "image": {"type": "string", "nullable": True},
-                            "video": {"type": "string", "nullable": True},
+                            "media": {"type": "array", "items": {"type": "string"}},
+                            "is_liked": {"type": "boolean"},
+                            "is_following": {"type": "boolean"},
                             "created_at": {"type": "string"}
                         }
                     }
@@ -79,36 +100,28 @@ class PostView(APIView):
         }
     }
 )
-
-
-class PostListView(ListAPIView):
-    queryset = Post.objects.all().order_by('-created_at')
-    pagination_class = StandardResultsSetPagination
+class PostListView(APIView):
     permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        page = self.paginate_queryset(queryset)
-
+    def get(self, request):
+        queryset = Post.objects.all().order_by('-created_at')
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(queryset, request)
         data = []
         for post in page:
             data.append({
                 "id": post.id,
                 "content": post.content,
                 "author": post.author.username,
-
-                # 🔥 Counts
                 "likes": post.likes_count,
                 "comments": post.comments_count,
-                # 🎥 Media
-                "media": [m.file.url for m in post.media.all()],
-                # 🧠 Smart fields
+                "media": [m.file.url for m in getattr(post, 'media', [])],  # كل الصور والفيديوهات
                 "is_liked": post.likes.filter(user=request.user).exists(),
                 "is_following": request.user.following.filter(id=post.author.id).exists(),
                 "created_at": post.created_at
             })
-
-        return self.get_paginated_response(data)
+        return paginator.get_paginated_response(data)
 # ----------------- Comment -----------------
 
 
@@ -256,6 +269,110 @@ class CommentListView(ListAPIView):
 
         return self.get_paginated_response(data)
 
+
+from .models import Comment, CommentReaction
+
+@extend_schema(
+    description="Get paginated comments for a post with replies and reactions",
+    responses={
+        200: OpenApiResponse(
+            response={
+                "type": "object",
+                "properties": {
+                    "count": {"type": "integer"},
+                    "next": {"type": "string", "nullable": True},
+                    "previous": {"type": "string", "nullable": True},
+                    "results": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "integer"},
+                                "content": {"type": "string"},
+                                "user": {"type": "string"},
+                                "likes": {"type": "integer"},
+                                "created_at": {"type": "string"},
+                                "reactions": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "user": {"type": "string"},
+                                            "emoji": {"type": "string"}
+                                        }
+                                    }
+                                },
+                                "replies": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "id": {"type": "integer"},
+                                            "content": {"type": "string"},
+                                            "user": {"type": "string"},
+                                            "likes": {"type": "integer"},
+                                            "created_at": {"type": "string"},
+                                            "reactions": {
+                                                "type": "array",
+                                                "items": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "user": {"type": "string"},
+                                                        "emoji": {"type": "string"}
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        )
+    }
+)
+class CommentListView(ListAPIView):
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+
+    def get_queryset(self):
+        post_id = self.kwargs['post_id']
+        # التعليقات الأساسية فقط (parent=None)
+        return Comment.objects.filter(post_id=post_id, parent=None).order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        page = self.paginate_queryset(queryset)
+        data = []
+        for comment in page:
+            # التفاعلات على التعليق الأساسي
+            reactions = [{"user": r.user.username, "emoji": r.emoji} for r in comment.reactions.all()]
+            # الردود على التعليق
+            replies = []
+            for reply in comment.replies.all():
+                reply_reactions = [{"user": rr.user.username, "emoji": rr.emoji} for rr in reply.reactions.all()]
+                replies.append({
+                    "id": reply.id,
+                    "content": reply.content,
+                    "user": reply.user.username,
+                    "likes": reply.likes_count,
+                    "created_at": reply.created_at,
+                    "reactions": reply_reactions
+                })
+
+            data.append({
+                "id": comment.id,
+                "content": comment.content,
+                "user": comment.user.username,
+                "likes": comment.likes_count,
+                "created_at": comment.created_at,
+                "reactions": reactions,
+                "replies": replies
+            })
+
+        return self.get_paginated_response(data)
 @extend_schema(
     request={
         "application/json": {
@@ -267,6 +384,105 @@ class CommentListView(ListAPIView):
     },
     responses={200: {"type": "object", "properties": {"message": {"type": "string"}}}}
 )
+@extend_schema(
+    description="Reply to a comment",
+    request={
+        "type": "object",
+        "properties": {
+            "content": {"type": "string", "description": "Reply text"}
+        },
+        "required": ["content"]
+    },
+    responses={
+        201: {
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer"},
+                "content": {"type": "string"},
+                "user": {"type": "string"},
+                "likes": {"type": "integer"},
+                "created_at": {"type": "string"},
+                "reactions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "user": {"type": "string"},
+                            "emoji": {"type": "string"}
+                        }
+                    }
+                }
+            }
+        }
+    }
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def reply_comment(request, comment_id):
+    comment = get_object_or_404(Comment, id=comment_id)
+    content = request.data.get("content")
+    reply = Comment.objects.create(
+        content=content,
+        user=request.user,
+        post=comment.post,
+        parent=comment
+    )
+    return Response({
+        "id": reply.id,
+        "content": reply.content,
+        "user": reply.user.username,
+        "likes": 0,
+        "created_at": reply.created_at,
+        "reactions": []
+    }, status=201)
+
+
+
+@extend_schema(
+    description="React to a comment (emoji)",
+    request={
+        "type": "object",
+        "properties": {
+            "emoji": {"type": "string", "description": "Emoji code or symbol"}
+        },
+        "required": ["emoji"]
+    },
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "comment_id": {"type": "integer"},
+                "emoji": {"type": "string"},
+                "user": {"type": "string"},
+                "message": {"type": "string"}
+            }
+        }
+    }
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def react_comment(request, comment_id):
+    comment = get_object_or_404(Comment, id=comment_id)
+    emoji = request.data.get("emoji")
+    reaction, created = CommentReaction.objects.get_or_create(
+        user=request.user,
+        comment=comment,
+        emoji=emoji
+    )
+    if not created:
+        reaction.delete()
+        return Response({
+            "comment_id": comment.id,
+            "emoji": emoji,
+            "user": request.user.username,
+            "message": "Reaction removed"
+        })
+    return Response({
+        "comment_id": comment.id,
+        "emoji": emoji,
+        "user": request.user.username,
+        "message": "Reaction added"
+    }) 
 class UpdateCommentView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -388,6 +604,22 @@ class ToggleCommentLikeView(APIView):
         "following": {"type": "boolean"}
     }}}
 )
+@extend_schema(
+    request=None,
+    responses={
+        
+        200: OpenApiResponse(
+            response=dict,
+            examples=[
+                {"message": "Followed"},
+                {"message": "Unfollowed"}
+            ]
+        ),
+        404: OpenApiResponse(description="User not found")
+    },
+    summary="Follow or unfollow a user",
+    description="Authenticated user can follow or unfollow another user."
+)
 class ToggleFollowView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -418,7 +650,54 @@ class ToggleFollowView(APIView):
             "message": "Followed",
             "following": True
         }, status=status.HTTP_200_OK)
+@extend_schema(
+    responses=OpenApiResponse(
+        response=list,
+        description="List of followers",
+        examples=[{"id": 2, "username": "ilyes"}]
+    ),
+    summary="Get followers of a user",
+)
+class FollowersView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request, user_id):
+        users = User.objects.filter(following__following_id=user_id)
+
+        data = [{"id": u.id, "username": u.username} for u in users]
+        return Response(data)
+@extend_schema(
+    responses=OpenApiResponse(
+        response=list,
+        description="List of users that this user is following",
+        examples=[{"id": 3, "username": "hana"}]
+    ),
+    summary="Get users that a user is following",
+)
+class FollowingView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id):
+        users = User.objects.filter(followers__follower_id=user_id)
+
+        data = [{"id": u.id, "username": u.username} for u in users]
+        return Response(data)
+@extend_schema(
+    responses=OpenApiResponse(
+        response=list,
+        description="Suggested users to follow",
+        examples=[{"id": 4, "username": "selma"}, {"id": 5, "username": "nour"}]
+    ),
+    summary="Get suggestions for users to follow",
+)
+class SuggestionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        users = User.objects.exclude(id=request.user.id).order_by('?')[:5]
+
+        data = [{"id": u.id, "username": u.username} for u in users]
+        return Response(data)
 
 @extend_schema(
     responses={
@@ -468,6 +747,7 @@ class FeedView(ListAPIView):
                 "likes": post.likes_count,
                 "comments": post.comments_count,
                 "is_liked": post.likes.filter(user=request.user).exists(),
+                "is_saved": post.saved_by.filter(user=request.user).exists(),
                 "created_at": post.created_at
             })
 
@@ -490,3 +770,84 @@ class SharePostView(APIView):
         )
 
         return Response({"message": "Post shared"})
+
+@extend_schema(
+    description="Toggle save/unsave post",
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string"}
+            }
+        }
+    }
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def toggle_save_post(request, post_id):
+    post = get_object_or_404(Post, id=post_id)
+
+    saved, created = SavedPost.objects.get_or_create(
+        user=request.user,
+        post=post
+    )
+
+    if not created:
+        saved.delete()
+        return Response({"message": "Post unsaved"})
+
+    return Response({"message": "Post saved"})
+
+#   عرض البوستات المحفوظ______
+
+
+
+@extend_schema(
+    description="Get saved posts",
+    responses={
+        200: {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer"},
+                    "content": {"type": "string"},
+                    "author": {"type": "string"},
+                    "media": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    },
+                    "likes": {"type": "integer"},
+                    "comments": {"type": "integer"},
+                    "is_saved": {"type": "boolean"},
+                    "created_at": {"type": "string"}
+                }
+            }
+        }
+    }
+)
+class SavedPostsView(ListAPIView):
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Post.objects.filter(
+            saved_by__user=self.request.user
+        ).order_by('-created_at')
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+
+        data = []
+        for post in queryset:
+            data.append({
+                "id": post.id,
+                "content": post.content,
+                "author": post.author.username,
+                "media": [m.file.url for m in post.media.all()],
+                "likes": post.likes_count,
+                "comments": post.comments_count,
+                "is_saved": True,
+                "created_at": post.created_at
+            })
+
+        return Response(data)

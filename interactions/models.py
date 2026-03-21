@@ -25,6 +25,14 @@ class PostMedia(models.Model):
     post = models.ForeignKey(Post, related_name='media', on_delete=models.CASCADE)
     file = models.FileField(upload_to='post_media/')
     uploaded_at = models.DateTimeField(auto_now_add=True)
+# save post---------------------------
+class SavedPost(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='saved_posts')
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='saved_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'post')  # يمنع حفظ نفس البوست مرتين
 
 
 # ----------------- Comment -----------------
@@ -33,6 +41,7 @@ class Comment(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     content = models.TextField(blank=True, default="")  # إضافة default
     created_at = models.DateTimeField(auto_now_add=True)
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='replies')
 
     @property
     def likes_count(self):
@@ -64,7 +73,14 @@ class CommentLike(models.Model):
 
     def str(self):
         return f"{self.user.username} likes Comment {self.comment.id}"
-
+# comment reaction______________
+class CommentReaction(models.Model):
+    comment = models.ForeignKey(Comment, on_delete=models.CASCADE, related_name='reactions')
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    emoji = models.CharField(max_length=10)  # مثال: "❤️", "😂", "👍"
+    
+    class Meta:
+        unique_together = ('comment', 'user', 'emoji')  # يمنع نفس 
 
 # ----------------- Follow -----------------
 class Follow(models.Model):
