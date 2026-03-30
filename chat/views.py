@@ -114,15 +114,14 @@
 #                 "created_at": m.created_at
 #             })
 
+# -------------------------- Conversations --------------------------
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 from django.db.models import Q
 from .models import Message
-from accounts.models import User
 
-# -------------------------- Conversations --------------------------
 @extend_schema(
     description="Get user conversations with last message and unread count",
     responses={
@@ -142,31 +141,42 @@ from accounts.models import User
         }
     }
 )
+
+
+
 class ConversationsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         user = request.user
-        conversations = Message.objects.filter(Q(sender=user) | Q(receiver=user)).order_by('-created_at')
+
+        conversations = Message.objects.filter(
+            Q(sender=user) | Q(receiver=user)
+        ).order_by('-created_at')
 
         search = request.GET.get('search', '')
+
         if search:
             conversations = conversations.filter(
-                Q(senderusernameicontains=search) |
-                Q(receiverusernameicontains=search)
+                Q(sender__username__icontains=search) |
+                Q(receiver__username__icontains=search)
             )
 
         users = {}
         data = []
+
         for msg in conversations:
             other_user = msg.receiver if msg.sender == user else msg.sender
+
             if other_user.id not in users:
                 users[other_user.id] = True
+
                 unread_count = Message.objects.filter(
                     sender=other_user,
                     receiver=user,
                     is_seen=False
                 ).count()
+
                 data.append({
                     "user_id": other_user.id,
                     "username": other_user.username,
@@ -175,7 +185,9 @@ class ConversationsView(APIView):
                     "unread_count": unread_count,
                     "file": msg.file.url if msg.file else None
                 })
+
         return Response(data)
+
         # -------------------------- Chat History --------------------------
 @extend_schema(
     description="Get chat history between current user and another user",
